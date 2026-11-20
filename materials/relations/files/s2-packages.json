@@ -1,0 +1,9 @@
+{
+  "file_id": "s2-packages",
+  "writer_version": "pw1",
+  "reader_version": "pr1",
+  "rows": [
+    {"row_id": "C", "revision": 1,
+     "values": {"part_ref": 100, "inspect_ref": 200, "pack_tag": 10}}
+  ]
+}

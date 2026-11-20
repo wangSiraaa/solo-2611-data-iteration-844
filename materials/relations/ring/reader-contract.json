@@ -1,0 +1,7 @@
+{
+  "version": "gr1",
+  "fields": [
+    {"field_id": "in_tag", "name": "in_tag", "type": {"kind": "DECIMAL", "precision": 8, "scale": 0}, "nullable": true},
+    {"field_id": "out_tag", "name": "out_tag", "type": {"kind": "DECIMAL", "precision": 8, "scale": 0}, "nullable": false}
+  ]
+}

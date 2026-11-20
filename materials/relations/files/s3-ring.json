@@ -1,0 +1,10 @@
+{
+  "file_id": "s3-ring-bootstrap",
+  "writer_version": "gw1",
+  "reader_version": "gr1",
+  "rows": [
+    {"row_id": "X", "revision": 1, "values": {"in_tag": null, "out_tag": 9}},
+    {"row_id": "E", "revision": 1, "values": {"in_tag": 9, "out_tag": 8}},
+    {"row_id": "F", "revision": 1, "values": {"in_tag": 8, "out_tag": 9}}
+  ]
+}

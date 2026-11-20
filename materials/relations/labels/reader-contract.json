@@ -1,0 +1,7 @@
+{
+  "version": "lr1",
+  "fields": [
+    {"field_id": "tag", "name": "tag", "type": {"kind": "DECIMAL", "precision": 10, "scale": 0}, "nullable": false},
+    {"field_id": "note", "name": "note", "type": {"kind": "TEXT"}, "nullable": true, "default": "-"}
+  ]
+}

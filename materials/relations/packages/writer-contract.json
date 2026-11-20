@@ -1,0 +1,9 @@
+{
+  "version": "pw1",
+  "fields": [
+    {"field_id": "part_ref", "name": "part_ref", "type": {"kind": "INT", "bits": 32}, "nullable": false},
+    {"field_id": "inspect_ref", "name": "inspect_ref", "type": {"kind": "INT", "bits": 32}, "nullable": false},
+    {"field_id": "pack_tag", "name": "pack_tag", "type": {"kind": "INT", "bits": 32}, "nullable": false},
+    {"field_id": "spare_ref", "name": "spare_ref", "type": {"kind": "INT", "bits": 32}, "nullable": true}
+  ]
+}

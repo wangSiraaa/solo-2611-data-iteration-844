@@ -1,0 +1,8 @@
+{
+  "file_id": "s2-shipping",
+  "writer_version": "sw1",
+  "reader_version": "sr1",
+  "rows": [
+    {"row_id": "D", "revision": 1, "values": {"pack_ref": 10, "route_code": "air"}}
+  ]
+}

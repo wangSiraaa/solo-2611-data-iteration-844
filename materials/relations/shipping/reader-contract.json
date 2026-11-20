@@ -1,0 +1,7 @@
+{
+  "version": "sr1",
+  "fields": [
+    {"field_id": "pack_ref", "name": "pack_ref", "type": {"kind": "DECIMAL", "precision": 10, "scale": 0}, "nullable": false},
+    {"field_id": "route_code", "name": "route_code", "type": {"kind": "TEXT"}, "nullable": false, "default": "std"}
+  ]
+}

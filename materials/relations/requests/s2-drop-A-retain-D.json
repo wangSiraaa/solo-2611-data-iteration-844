@@ -1,0 +1,8 @@
+{
+  "request_id": "s2-drop-A-retain-D",
+  "relation": "labels",
+  "row_id": "A",
+  "retain": [
+    {"relation": "shipping", "row_id": "D"}
+  ]
+}

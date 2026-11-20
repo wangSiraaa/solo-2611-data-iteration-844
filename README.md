@@ -265,6 +265,142 @@ No arbitrary type inference, no Arrow Union, no online database migration.
 
 ---
 
+## 4. Named relations and retractable alias records (`extcontract/relations.py`, `extcontract/directory.py`)
+
+The single fixed-reader ingestion above handles one contract pair. A data
+exchange station runs several such libraries at once. The relation layer adds
+**named relations**, **public alias classes** and **retractable records** on
+top of the unchanged adaptation path — every row still passes the ordinary
+writer-domain validation and the exact compatibility plan before any binding
+can exist, so an undeclared column, a type mismatch or an out-of-contract
+value can never become a reference.
+
+### Catalog document
+
+```json
+{
+  "catalog_version": "cat1",
+  "relations": [
+    {"relation": "labels", "writer": "lw1", "reader": "lr1",
+     "provides": [
+       {"name": "part_tag", "class": "part", "fields": ["tag"]},
+       {"name": "inspection_tag", "class": "inspection", "fields": ["tag"]}],
+     "requires": []},
+    {"relation": "packages", "writer": "pw1", "reader": "pr1",
+     "provides": [
+       {"name": "pack_label", "class": "package", "fields": ["pack_tag"]}],
+     "requires": [
+       {"name": "need_part", "relation": "labels", "class": "part",
+        "fields": ["part_ref"]},
+       {"name": "need_inspection", "relation": "labels", "class": "inspection",
+        "fields": ["inspect_ref"]},
+       {"name": "spare_part", "relation": "labels", "class": "part",
+        "fields": ["spare_ref"], "optional": true}]}
+  ]
+}
+```
+
+* `provides` publishes an alias class; several rows may publish the same key
+  (two source sheets can both carry tag K).
+* `requires` names an alias class of another (or the same) relation and the
+  row's own ordered fields whose tuple is looked up against the providers.
+* A row may carry multiple provisions, multiple requirements, and both at
+  once. Every binding keeps its own ordered `fields` and per-column
+  `sources` provenance, so each row's offers, dependencies and source columns
+  are independently deliverable and can grow/shrink when the row is revised.
+
+### Binding identity
+
+A key is `(relation, alias class, ordered field tuple)` over **canonical
+reader-domain** values:
+
+* numeric `1` and `"2/2"` adapt to the same value and share a key
+  (`INT → DECIMAL` or `DECIMAL → DECIMAL` compare numerically);
+* TEXT `"1"` is its own kind and never matches a numeric key;
+* tuple position matters: `(1, 2) ≠ (2, 1)`;
+* any null tuple element means the key does not exist. A null provision
+  publishes nothing; a null **required** dependency makes the row
+  unqualified; a null **optional** dependency is skipped and reported under
+  `skipped_requires`.
+
+Catalog loading itself rejects unknown target classes, arity mismatches,
+TEXT/numeric position mismatches, and binding fields that are not reader
+columns of the relation.
+
+### Extraction result per adapted row
+
+```json
+{
+  "relation": "packages", "row_id": "C", "revision": 1,
+  "provides": [{"name": "pack_label", "relation": "packages",
+                "class": "package",
+                "key": {"class": "package", "tuple": [["NUM", "10"]]},
+                "fields": ["pack_tag"], "optional": false,
+                "sources": [{"field_id": "pack_tag", "conversion":
+                             "int_to_decimal_exact", "input": 10,
+                             "binding": "pack_label", "tuple_position": 0}]}],
+  "requires": [ ... ],
+  "skipped_requires": [{"name": "spare_part", "...": "...",
+                        "reason": "optional dependency tuple contains null; skipped"}]
+}
+```
+
+### Directory library and withdrawal closures
+
+```python
+catalog = load_catalog("materials/relations/catalog.json", contract_paths)
+directory = DirectoryLibrary(catalog, state_path="state.json")
+directory.ingest_relation("labels", file_document)   # catalog-level qualification
+result = directory.withdraw({"request_id": "w1",
+                             "relation": "labels", "row_id": "A",
+                             "retain": [{"relation": "shipping", "row_id": "D"}]})
+DirectoryLibrary.reopen(catalog, "state.json")        # restart and query again
+directory.publish_relation("labels")                  # reader-records/v1 output
+```
+
+Withdrawal is decided by the library, not the caller:
+
+1. the request's root row leaves in round 0;
+2. each later round removes every active row that has lost **all** providers
+   of a non-optional required key, recording the round's new rows, the keys
+   lost, their previous providers and the remaining providers;
+3. rounds repeat until the set is stable;
+4. a cycle whose members keep supplying one another is untouched, because no
+   member ever loses a required key;
+5. any active row may be pinned as retained (station-level via
+   `retain()`/`released()` or per-request via `retain`); if the closure would
+   touch one, the whole request is **rejected** and nothing changes.
+
+Persistence is one local JSON state file covering **all** relations, written
+via temp-file plus atomic `os.replace`. Ingestion and withdrawal are computed
+on staged clones and committed in one swap, so a rejected or replayed request
+writes nothing — a half withdrawal is unobservable. Withdrawal request ids are
+ledgered: resubmitting an id replays the original decision. Reopen refuses a
+state file whose catalog fingerprint differs.
+
+### Mandated scenarios (all asserted in `tests/` and `examples/run_relations_demo.py`)
+
+1. A and B both supply K; C requires K and supplies J; D requires J.
+   Withdrawing A removes **only A** (B keeps K alive).
+2. On fresh data B is revised onto another legal key; withdrawing A then
+   cascades **A → C → D** over three rounds. With D retained, the request is
+   rejected and all four current rows survive.
+3. The last external alternative supplier X leaves an E↔F ring; the ring
+   stays self-sufficient and only X is removed.
+
+```bash
+PYTHONPATH=. python3.11 examples/run_relations_demo.py
+# CLI equivalents (single state file, real reader_client on publish):
+PYTHONPATH=. python3.11 -m extcontract dir-ingest   materials/relations/catalog.json \
+    materials/relations labels materials/relations/files/s1-labels.json --state state.json
+PYTHONPATH=. python3.11 -m extcontract dir-withdraw materials/relations/catalog.json \
+    materials/relations materials/relations/requests/s1-drop-A.json --state state.json
+PYTHONPATH=. python3.11 -m extcontract dir-publish  materials/relations/catalog.json \
+    materials/relations --state state.json --out-dir published/
+```
+
+---
+
 ## Templates for the mandated scenario
 
 `fixtures/bootstrap.json`, `fixtures/F-BAD.json`, `fixtures/F-NEW.json` are the
@@ -282,14 +418,20 @@ exact documents from the brief:
 
 ```
 extcontract/
-  errors.py     exceptions (business rejections are results, not exceptions)
-  types.py      INT/DECIMAL/TEXT domain model, exact encode/decode
-  contract.py   writer/reader contract parsing, defaults, duplicate checks
-  compat.py     row-free whole-domain proof + adaptation plan + witnesses
-  adapter.py    per-row validation + plan application -> reader-records/v1
-  ingest.py     revision-aware, atomic, idempotent target state
-  cli.py        compat / adapt / ingest commands
-examples/run_745_demo.py   end-to-end scenario against the real client
-fixtures/                  bootstrap, F-BAD, F-NEW documents
-tests/                     compat, adapter, ingest, fixtures, scale
+  errors.py       exceptions (business rejections are results, not exceptions)
+  types.py        INT/DECIMAL/TEXT domain model, exact encode/decode
+  contract.py     writer/reader contract parsing, defaults, duplicate checks
+  compat.py       row-free whole-domain proof + adaptation plan + witnesses
+  adapter.py      per-row validation + plan application -> reader-records/v1
+  ingest.py       revision-aware, atomic, idempotent target state
+  relations.py    catalogs, canonical binding keys, per-row binding extraction
+  directory.py    multi-relation directory, withdrawal closures, persistence
+  cli.py          compat / adapt / ingest / dir-ingest / dir-withdraw /
+                  dir-publish commands
+examples/run_745_demo.py        original single-reader end-to-end scenario
+examples/run_relations_demo.py  named-relation, revision and withdrawal demo
+fixtures/                       bootstrap, F-BAD, F-NEW documents
+materials/relations/            catalog, per-relation contracts, files, requests
+tests/                          compat, adapter, ingest, fixtures, scale plus
+                                 relations, directory, binding identity, tuples
 ```

@@ -1,0 +1,7 @@
+{
+  "version": "gw1",
+  "fields": [
+    {"field_id": "in_tag", "name": "in_tag", "type": {"kind": "INT", "bits": 16}, "nullable": true},
+    {"field_id": "out_tag", "name": "out_tag", "type": {"kind": "INT", "bits": 16}, "nullable": false}
+  ]
+}

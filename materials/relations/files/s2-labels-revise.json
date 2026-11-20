@@ -1,0 +1,8 @@
+{
+  "file_id": "s2-labels-revise",
+  "writer_version": "lw1",
+  "reader_version": "lr1",
+  "rows": [
+    {"row_id": "B", "revision": 2, "values": {"tag": 101}}
+  ]
+}

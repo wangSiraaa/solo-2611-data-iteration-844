@@ -1,0 +1,48 @@
+{
+  "catalog_version": "cat1",
+  "relations": [
+    {
+      "relation": "labels",
+      "writer": "lw1",
+      "reader": "lr1",
+      "provides": [
+        {"name": "part_tag", "class": "part", "fields": ["tag"]},
+        {"name": "inspection_tag", "class": "inspection", "fields": ["tag"]}
+      ],
+      "requires": []
+    },
+    {
+      "relation": "packages",
+      "writer": "pw1",
+      "reader": "pr1",
+      "provides": [
+        {"name": "pack_label", "class": "package", "fields": ["pack_tag"]}
+      ],
+      "requires": [
+        {"name": "need_part", "relation": "labels", "class": "part", "fields": ["part_ref"]},
+        {"name": "need_inspection", "relation": "labels", "class": "inspection", "fields": ["inspect_ref"]},
+        {"name": "spare_part", "relation": "labels", "class": "part", "fields": ["spare_ref"], "optional": true}
+      ]
+    },
+    {
+      "relation": "shipping",
+      "writer": "sw1",
+      "reader": "sr1",
+      "provides": [],
+      "requires": [
+        {"name": "need_package", "relation": "packages", "class": "package", "fields": ["pack_ref"]}
+      ]
+    },
+    {
+      "relation": "ring",
+      "writer": "gw1",
+      "reader": "gr1",
+      "provides": [
+        {"name": "ring_out", "class": "signal", "fields": ["out_tag"]}
+      ],
+      "requires": [
+        {"name": "ring_in", "relation": "ring", "class": "signal", "fields": ["in_tag"], "optional": true}
+      ]
+    }
+  ]
+}

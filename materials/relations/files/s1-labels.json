@@ -1,0 +1,10 @@
+{
+  "file_id": "s1-labels",
+  "writer_version": "lw1",
+  "reader_version": "lr1",
+  "rows": [
+    {"row_id": "A", "revision": 1, "values": {"tag": 100, "note": "source A part"}},
+    {"row_id": "B", "revision": 1, "values": {"tag": 100, "note": "source B part"}},
+    {"row_id": "I", "revision": 1, "values": {"tag": 200, "note": "inspection tag"}}
+  ]
+}

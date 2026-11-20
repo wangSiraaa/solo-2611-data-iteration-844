@@ -1,0 +1,7 @@
+{
+  "version": "lw1",
+  "fields": [
+    {"field_id": "tag", "name": "tag", "type": {"kind": "INT", "bits": 32}, "nullable": false},
+    {"field_id": "note", "name": "note", "type": {"kind": "TEXT"}, "nullable": true}
+  ]
+}

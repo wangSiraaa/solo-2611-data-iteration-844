@@ -475,6 +475,115 @@ class IngestionLibrary:
             receipt = self._receipts.get((rv, file_id))
             return receipt.to_json() if receipt else None
 
+    # -- state transfer (used by the multi-relation directory library) ------
+
+    def export_state(self) -> dict:
+        """Return a JSON-safe deep copy of the whole target state.
+
+        The directory library persists one file per catalog covering every
+        relation; it composes these per-relation documents.  Canonical values
+        round-trip as tagged JSON so ``1`` (numeric) and ``"1"`` (TEXT) never
+        collapse into one another.
+        """
+        with self._lock:
+            rows = {}
+            for row_id, row in self._rows.get(self.reader.version, {}).items():
+                rows[row_id] = {
+                    "revision": row.revision,
+                    "canonical": {
+                        k: _tagged_value(v) for k, v in row.canonical.items()
+                    },
+                    "encoded": _deep_copy_json(row.encoded),
+                    "sources": _deep_copy_json(row.sources),
+                    "writer_values": _deep_copy_json(
+                        {k: _json_safe(v) for k, v in row.writer_values.items()}
+                    ),
+                }
+            receipts = {}
+            for (_, file_id), receipt in self._receipts.items():
+                receipts[file_id] = {
+                    "file_id": receipt.file_id,
+                    "writer_version": receipt.writer_version,
+                    "reader_version": receipt.reader_version,
+                    "fingerprint": receipt.fingerprint,
+                    "sequence": receipt.sequence,
+                    "applied": _deep_copy_json(receipt.applied),
+                    "ignored": _deep_copy_json(receipt.ignored),
+                    "replayed_rows": list(receipt.replayed_rows),
+                    "row_ids": list(receipt.row_ids),
+                }
+            return {
+                "reader_version": self.reader.version,
+                "sequence": self._sequence,
+                "rows": rows,
+                "receipts": receipts,
+            }
+
+    @classmethod
+    def import_state(cls, reader: Contract, state: dict) -> "IngestionLibrary":
+        """Rebuild a library from an :meth:`export_state` document."""
+        from .types import IntType, TextType
+
+        library = cls(reader)
+        if state.get("reader_version") != reader.version:
+            raise ContractError(
+                f"state reader_version {state.get('reader_version')!r} does not "
+                f"match fixed reader {reader.version!r}"
+            )
+        field_types = {f.field_id: f.type for f in reader.fields}
+
+        def decode_canonical(field_id, tagged):
+            if tagged[0] == "NULL":
+                return None
+            if tagged[0] == "TEXT":
+                t = field_types.get(field_id)
+                if not isinstance(t, TextType):
+                    raise ContractError(
+                        f"state: TEXT tag for non-TEXT field {field_id!r}"
+                    )
+                return tagged[1]
+            if tagged[0] == "NUM":
+                t = field_types.get(field_id)
+                if isinstance(t, TextType):
+                    raise ContractError(
+                        f"state: NUM tag for TEXT field {field_id!r}"
+                    )
+                number = Fraction(tagged[1])
+                return number.numerator if isinstance(t, IntType) else number
+            raise ContractError(f"state: unknown tagged value {tagged!r}")
+
+        rows = {}
+        for row_id, raw in state.get("rows", {}).items():
+            rows[row_id] = RowState(
+                row_id=row_id,
+                revision=raw["revision"],
+                canonical={
+                    k: decode_canonical(k, v) for k, v in raw["canonical"].items()
+                },
+                encoded=_deep_copy_json(raw["encoded"]),
+                sources=_deep_copy_json(raw["sources"]),
+                writer_values=_deep_copy_json(raw.get("writer_values", {})),
+            )
+        library._rows[reader.version] = rows
+        for file_id, raw in state.get("receipts", {}).items():
+            library._receipts[(reader.version, file_id)] = Receipt(
+                file_id=raw["file_id"],
+                writer_version=raw["writer_version"],
+                reader_version=reader.version,
+                fingerprint=raw["fingerprint"],
+                sequence=raw["sequence"],
+                applied=_deep_copy_json(raw.get("applied", [])),
+                ignored=_deep_copy_json(raw.get("ignored", [])),
+                replayed_rows=list(raw.get("replayed_rows", [])),
+                row_ids=list(raw.get("row_ids", [])),
+            )
+        library._sequence = state.get("sequence", 0)
+        return library
+
+    def clone(self) -> "IngestionLibrary":
+        """Deep copy used to stage an atomic decision before committing."""
+        return self.import_state(self.reader, self.export_state())
+
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -531,6 +640,13 @@ def _canonical_equal(a: dict, b: dict) -> bool:
 
 def _copy_value(value: Any) -> Any:
     return Fraction(value) if isinstance(value, Fraction) else value
+
+
+def _json_safe(value: Any) -> Any:
+    """Fractions -> minimal fraction strings; other JSON values unchanged."""
+    if isinstance(value, Fraction):
+        return rational_string(value)
+    return value
 
 
 def _tagged_value(value: Any) -> Any:
